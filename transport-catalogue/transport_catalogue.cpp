@@ -8,7 +8,7 @@ void TransportCatalogue::AddStop(std::string& name, double lt, double lg) {
     stopname_to_stop_[name] = &stops_.back();
 }
 
-void TransportCatalogue::AddBus(std::string& name, std::vector<std::string>& stops) {
+void TransportCatalogue::AddBus(std::string& name, const std::vector<std::string>& stops) {
     Bus bus;
     bus.name = name;
     vector<Stop*> bus_stops;
@@ -20,6 +20,32 @@ void TransportCatalogue::AddBus(std::string& name, std::vector<std::string>& sto
 
     buses_.push_back(move(bus));
     busname_to_route_[name] = &buses_.back();
+
+
+    set<Stop*> repeated_three_times;
+
+    double real_distance = 0;
+    auto prev_stop = *busname_to_route_[name]->stops.begin();
+    real_distance += stop_distance_[pair(prev_stop, prev_stop)];
+    for (auto it = next(busname_to_route_[name]->stops.begin()); it != busname_to_route_[name]->stops.end(); it++) {
+        if (prev_stop->name == (*it)->name) { repeated_three_times.insert(*it); }
+
+        if (stop_distance_.count(pair(prev_stop, *it)) == 0) {
+            real_distance += stop_distance_[pair(*it, prev_stop)];
+        }
+        else { real_distance += stop_distance_[pair(prev_stop, *it)]; }
+        real_distance += stop_distance_[pair(*it, *it)];
+        prev_stop = *it;
+    }
+
+    real_distance -= stop_distance_[pair(*busname_to_route_[name]->stops.rbegin(), *busname_to_route_[name]->stops.rbegin())];
+
+
+    for (auto stop : repeated_three_times) {
+        real_distance -= 4 * stop_distance_[pair(stop, stop)];
+    }
+
+    real_distance_[name] = real_distance;
 }
 
 void TransportCatalogue::GetBusInfo(std::string& name) {
@@ -40,32 +66,9 @@ void TransportCatalogue::GetBusInfo(std::string& name) {
         prev_coor = (*it)->coor;
     }
 
-    set<Stop*> repeated_three_times;
+    double temp_curv = real_distance_[name] / ideal_distance;
 
-    double real_distance = 0;
-    auto prev_stop = *busname_to_route_[name]->stops.begin();
-    real_distance += stop_distance_[pair(prev_stop, prev_stop)];
-    for (auto it = next(busname_to_route_[name]->stops.begin()); it != busname_to_route_[name]->stops.end(); it++) {
-        if (prev_stop->name == (*it)->name) { repeated_three_times.insert(*it); }
-        
-        if (stop_distance_.count(pair(prev_stop, *it)) == 0) {
-            real_distance += stop_distance_[pair(*it, prev_stop)];
-        }
-        else { real_distance += stop_distance_[pair(prev_stop, *it)]; }
-        real_distance += stop_distance_[pair(*it, * it)];
-        prev_stop = *it;
-
-    }
-    real_distance -= stop_distance_[pair(*busname_to_route_[name]->stops.rbegin(), *busname_to_route_[name]->stops.rbegin())];
-
-   
-    for (auto stop : repeated_three_times) {
-        real_distance -= 4 * stop_distance_[pair(stop, stop)];
-    }
-
-    double temp_curv = real_distance / ideal_distance;
-
-    PrintBusInfo(name, busname_to_route_[name]->stops.size(), unique.size(), real_distance, temp_curv);
+    PrintBusInfo(name, busname_to_route_[name]->stops.size(), unique.size(), real_distance_[name], temp_curv);
 }
 
 void TransportCatalogue::GetStopInfo(std::string& name) {
@@ -76,7 +79,7 @@ void TransportCatalogue::GetStopInfo(std::string& name) {
     PrintStopInfo(name, buses_to_stop_[name]);
 }
 
-void TransportCatalogue::AddDistance(string name, double distance, string name2) {
+void TransportCatalogue::AddDistance(const string& name, double distance, const string& name2) {
     auto stop_to_stop = pair(stopname_to_stop_[name], stopname_to_stop_[name2]);
     stop_distance_[stop_to_stop] = distance;
 }
