@@ -29,13 +29,13 @@ class TransportCatalogue {
 public:
     void AddStop(std::string& name, double lt, double lg);
 
-    void AddBus(std::string& name, std::vector<std::string>& stops);
+    void AddBus(std::string& name, const std::vector<std::string>& stops);
 
     void GetBusInfo(std::string& name);
 
     void GetStopInfo(std::string& name);
 
-    void AddDistance(std::string name, double distance, std::string name2);
+    void AddDistance(const std::string& name, double distance, const std::string& name2);
 
 private:
     struct StopNameToStopHasher
@@ -71,4 +71,5 @@ private:
     std::unordered_map<std::string, std::set<std::string>, StopNameToStopHasher> buses_to_stop_; // автобусы через Stop
 
     std::unordered_map<std::pair<Stop*, Stop*>, double, DistanceHasher> stop_distance_; //дистанция между остановками
+    std::unordered_map<std::string, size_t, BusNameToRouteHasher> real_distance_; //все дистанции маршрутов
 };
