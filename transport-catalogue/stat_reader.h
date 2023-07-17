@@ -8,11 +8,11 @@
 #include <set>
 #include <sstream>
 
-void PrintBusInfo(const std::string& name, int total_size, int unique_size, double real_distance, double curv);
+void PrintBusInfo(std::ostream& out, const std::string& name, int total_size, int unique_size, double real_distance, double curv);
 
-void PrintStopInfo(const std::string& name, const std::set<std::string>& buses);
+void PrintStopInfo(std::ostream& out, const std::string& name, const std::set<std::string>& buses);
 
-void NotFoundBus(const std::string& name);
+void NotFoundBus(std::ostream& out, const std::string& name);
 
-void NotFoundStop(const std::string& name);
+void NotFoundStop(std::ostream& out, const std::string& name);
 
