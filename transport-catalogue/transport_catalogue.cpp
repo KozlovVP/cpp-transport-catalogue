@@ -49,8 +49,9 @@ void TransportCatalogue::AddBus(std::string& name, const std::vector<std::string
 }
 
 void TransportCatalogue::GetBusInfo(std::string& name) {
+    //ostringstream out;
     if (busname_to_route_.find(name) == busname_to_route_.end()) {
-        NotFoundBus(name);
+        NotFoundBus(cout, name);
         return;
     }
 
@@ -68,15 +69,15 @@ void TransportCatalogue::GetBusInfo(std::string& name) {
 
     double temp_curv = real_distance_[name] / ideal_distance;
 
-    PrintBusInfo(name, busname_to_route_[name]->stops.size(), unique.size(), real_distance_[name], temp_curv);
+    PrintBusInfo(cout, name, busname_to_route_[name]->stops.size(), unique.size(), real_distance_[name], temp_curv);
 }
 
 void TransportCatalogue::GetStopInfo(std::string& name) {
     if (stopname_to_stop_.find(name) == stopname_to_stop_.end()) {
-        NotFoundStop(name);
+        NotFoundStop(cout, name);
         return;
     }
-    PrintStopInfo(name, buses_to_stop_[name]);
+    PrintStopInfo(cout, name, buses_to_stop_[name]);
 }
 
 void TransportCatalogue::AddDistance(const string& name, double distance, const string& name2) {
