@@ -1,75 +1,47 @@
 #pragma once
 
-// напишите решение с нуля
-// код сохраните в свой git-репозиторий
-#include "geo.h"
-#include <string>
+#include "domain.h"
+
 #include <deque>
-#include <unordered_map>
-#include <vector>
-#include <tuple>
-#include <string_view>
 #include <set>
+#include <string>
+#include <vector>
+#include <unordered_map>
 #include <utility>
 
-#include "stat_reader.h"
+namespace catalogue {
+    class TransportCatalogue {
+    public:
+        TransportCatalogue() {};
 
+        void AddStop(const std::string &name, const geo::Coordinates& coordinates);
+        void AddDistance(const std::string& from, const std::string& to, int distance);
+        void AddBus(const std::string& bus_name, const std::vector<std::string>& stops_name, bool is_roundtrip);
+        BusInfo GetBusInfo(std::string_view bus_name) const;
+        StopInfo GetStopInfo(std::string_view stop_name) const;
+        const std::unordered_map<std::string_view, Bus*> GetBusesMap() const;
+        const std::unordered_map<std::string_view, Stop*> GetStopsMap() const;
+    private:
+        class DistanceHasher {
+        public:
+            size_t operator()(std::pair<Stop*, Stop*> stops_pair) const {
+                size_t first = hasher(stops_pair.first);
+                size_t second = hasher(stops_pair.second);
+                return first + 37 * second;
+            }
+            std::hash<const void*> hasher;
+        };
 
-struct Stop {
-    std::string name;
-    Coordinates coor;
-};
+        int ComputeStopCount(std::string_view bus_name) const;
+        int ComputeUniqueStopCount(std::string_view bus_name) const;
+        RoadInfo ComputeRoadInfo(std::string_view bus_name) const;
+        int GetRouteLength(const Stop* from, const Stop* to) const;
 
-struct Bus {
-    std::string name;
-    std::vector<Stop*> stops;
-};
-
-class TransportCatalogue {
-public:
-    void AddStop(std::string& name, double lt, double lg);
-
-    void AddBus(std::string& name, const std::vector<std::string>& stops);
-
-    void GetBusInfo(std::string& name);
-
-    void GetStopInfo(std::string& name);
-
-    void AddDistance(const std::string& name, double distance, const std::string& name2);
-
-private:
-    struct StopNameToStopHasher
-    {
-        size_t operator()(const std::string& name) const {
-            std::hash<std::string> hasher;
-            return hasher(name);
-        }
+        std::unordered_map<std::string_view, Bus*> buses_map_;
+        std::unordered_map<std::string_view, Stop*> stops_map_;
+        std::deque<Stop> stops_;
+        std::deque<Bus> buses_;
+        std::unordered_map<std::string_view, std::set<std::string_view>> stop_to_buses_;
+        std::unordered_map<std::pair<Stop*, Stop*>, int, DistanceHasher> stops_to_distance_;
     };
-
-    struct BusNameToRouteHasher
-    {
-        size_t operator()(const std::string name) const {
-            std::hash<std::string> hasher;
-            return hasher(name);
-        }
-    };
-
-    struct DistanceHasher
-    {
-        size_t operator()(const std::pair<Stop*, Stop*> stops) const {
-            std::hash<std::string> hasher;
-            return hasher(stops.first->name) * 37 + hasher(stops.second->name);
-        }
-    };
-
-    std::deque<Stop> stops_; // все остановки
-    std::unordered_map<std::string, Stop*, StopNameToStopHasher> stopname_to_stop_; // поиск остановки по имени
-
-    std::deque<Bus> buses_; // все маршруты
-    std::unordered_map<std::string, Bus*, BusNameToRouteHasher> busname_to_route_; // поиск маршрута по имени
-
-    std::unordered_map<std::string, std::set<std::string>, StopNameToStopHasher> buses_to_stop_; // автобусы через Stop
-
-    std::unordered_map<std::pair<Stop*, Stop*>, double, DistanceHasher> stop_distance_; //дистанция между остановками
-    std::unordered_map<std::string, size_t, BusNameToRouteHasher> real_distance_; //все дистанции маршрутов
-};
+} // namespace catalogue
