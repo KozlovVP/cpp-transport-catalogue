@@ -1,90 +1,142 @@
 #include "transport_catalogue.h"
 
+#include <algorithm>
+#include <unordered_set>
+
+#include <iostream>
+
 using namespace std;
 
-void TransportCatalogue::AddStop(std::string& name, double lt, double lg) {
-    Stop stop{ name, lt, lg };
-    stops_.push_back(move(stop));
-    stopname_to_stop_[name] = &stops_.back();
-}
-
-void TransportCatalogue::AddBus(std::string& name, const std::vector<std::string>& stops) {
-    Bus bus;
-    bus.name = name;
-    vector<Stop*> bus_stops;
-    for (const auto& stop : stops) {
-        bus_stops.push_back(stopname_to_stop_[stop]);
-        buses_to_stop_[stopname_to_stop_[stop]->name].insert(name);
+namespace catalogue {
+    void TransportCatalogue::AddStop(const string &name, const geo::Coordinates& coordinates) {
+        stops_.push_back(move(Stop(name, move(coordinates))));
+        stops_map_[stops_.back().name] = &(stops_.back());
     }
-    bus.stops = move(bus_stops);
 
-    buses_.push_back(move(bus));
-    busname_to_route_[name] = &buses_.back();
+    void TransportCatalogue::AddDistance(const string& from, const string& to, int distance) {
+        Stop* stop_from = stops_map_.at(from);
+        Stop* stop_to = stops_map_.at(to);
+        stops_to_distance_[make_pair(stop_from, stop_to)] = distance;
+    }
 
-
-    set<Stop*> repeated_three_times;
-
-    double real_distance = 0;
-    auto prev_stop = *busname_to_route_[name]->stops.begin();
-    real_distance += stop_distance_[pair(prev_stop, prev_stop)];
-    for (auto it = next(busname_to_route_[name]->stops.begin()); it != busname_to_route_[name]->stops.end(); it++) {
-        if (prev_stop->name == (*it)->name) { repeated_three_times.insert(*it); }
-
-        if (stop_distance_.count(pair(prev_stop, *it)) == 0) {
-            real_distance += stop_distance_[pair(*it, prev_stop)];
+    void TransportCatalogue::AddBus(const string& name, const std::vector<string>& stops_name, bool is_roundtrip) {
+        vector<Stop*> stops;
+        for (const auto &stop_name : stops_name) {
+            stops.push_back(stops_map_.at(stop_name));
         }
-        else { real_distance += stop_distance_[pair(prev_stop, *it)]; }
-        real_distance += stop_distance_[pair(*it, *it)];
-        prev_stop = *it;
+        buses_.push_back(move(Bus(name, move(stops), is_roundtrip)));
+        buses_map_[buses_.back().name] = &(buses_.back());
+
+        for (const auto& stop : buses_.back().stops) {
+            stop_to_buses_[stop->name].insert(buses_.back().name);
+        }
+    }
+    BusInfo TransportCatalogue::GetBusInfo(string_view bus_name) const {
+        BusInfo info;
+        info.bus = bus_name;
+        info.stops = ComputeStopCount(bus_name);
+        info.unique_stops = ComputeUniqueStopCount(bus_name);
+        info.road_info = ComputeRoadInfo(bus_name);
+        return info;
     }
 
-    real_distance -= stop_distance_[pair(*busname_to_route_[name]->stops.rbegin(), *busname_to_route_[name]->stops.rbegin())];
+    StopInfo TransportCatalogue::GetStopInfo(string_view stop_name) const {
+        StopInfo info;
+        if (stops_map_.count(stop_name) == 0) {
+            info.stop = stop_name;
+            info.stop_exist = false;
+            return info;
+        }
 
-
-    for (auto stop : repeated_three_times) {
-        real_distance -= 4 * stop_distance_[pair(stop, stop)];
+        if (stop_to_buses_.count(stop_name) == 0) {
+            info.stop = stop_name;
+            info.stop_exist = true;
+            info.buses_exist = false;
+            return info;
     }
 
-    real_distance_[name] = real_distance;
-}
-
-void TransportCatalogue::GetBusInfo(std::string& name) {
-    //ostringstream out;
-    if (busname_to_route_.find(name) == busname_to_route_.end()) {
-        NotFoundBus(cout, name);
-        return;
+        info.stop = stop_name;
+        info.buses = &stop_to_buses_.at(stop_name);
+        info.stop_exist = true;
+        info.buses_exist = true;
+        return info;
     }
 
-    unordered_map<string_view, int> unique;
-    for (const auto stop : busname_to_route_[name]->stops) {
-        unique[stop->name] += 1;
+    int TransportCatalogue::ComputeStopCount(string_view bus_name) const {
+        if (buses_map_.count(bus_name) == 0) {
+            return 0;
+        };
+
+        int result = buses_map_.at(bus_name)->stops.size();
+        if (!buses_map_.at(bus_name)->is_roundtrip) {
+            result = 2.0 * result - 1;
+        }
+        return result;
     }
 
-    double ideal_distance = 0;
-    auto prev_coor = (*busname_to_route_[name]->stops.begin())->coor;
-    for (auto it = busname_to_route_[name]->stops.begin() + 1; it != busname_to_route_[name]->stops.end(); it++) {
-        ideal_distance += ComputeDistance(prev_coor, (*it)->coor);
-        prev_coor = (*it)->coor;
+    int TransportCatalogue::ComputeUniqueStopCount(string_view bus_name) const {
+        if (buses_map_.count(bus_name) == 0) {
+            return 0;
+        }
+
+        unordered_set<string> unique_stops;
+        for (auto stop_ptr : buses_map_.at(bus_name)->stops) {
+            unique_stops.insert(stop_ptr->name);
+        }
+        return unique_stops.size();
     }
 
-    double temp_curv = real_distance_[name] / ideal_distance;
+    RoadInfo TransportCatalogue::ComputeRoadInfo(string_view bus_name) const {
+        if (buses_map_.count(bus_name) == 0) {
+            return {0.0, 0};
+        }
 
-    PrintBusInfo(cout, name, busname_to_route_[name]->stops.size(), unique.size(), real_distance_[name], temp_curv);
-}
+        double distance = 0.0;
+        int length = 0;
+        int n_stops = buses_map_.at(bus_name)->stops.size();
+        for (int i = 0; i <= n_stops-2; ++i) {
+            distance += ComputeDistance(
+                    buses_map_.at(bus_name)->stops[i]->coordinates,
+                    buses_map_.at(bus_name)->stops[i+1]->coordinates
+            );
+            length += GetRouteLength(
+                    buses_map_.at(bus_name)->stops[i],
+                    buses_map_.at(bus_name)->stops[i+1]
+            );
+            if (!buses_map_.at(bus_name)->is_roundtrip) {
+                length += GetRouteLength(
+                        buses_map_.at(bus_name)->stops[i+1],
+                        buses_map_.at(bus_name)->stops[i]
+                );
+            }
+        }
 
-void TransportCatalogue::GetStopInfo(std::string& name) {
-    if (stopname_to_stop_.find(name) == stopname_to_stop_.end()) {
-        NotFoundStop(cout, name);
-        return;
+        if (!buses_map_.at(bus_name)->is_roundtrip) {
+            distance *= 2.0;
+        }
+        return {distance, length};
     }
-    PrintStopInfo(cout, name, buses_to_stop_[name]);
-}
 
-void TransportCatalogue::AddDistance(const string& name, double distance, const string& name2) {
-    auto stop_to_stop = pair(stopname_to_stop_[name], stopname_to_stop_[name2]);
-    stop_distance_[stop_to_stop] = distance;
-}
+    int TransportCatalogue::GetRouteLength(const Stop* from, const Stop* to) const {
+        pair<Stop*, Stop*> key = make_pair(const_cast<Stop*>(from), const_cast<Stop*>(to));
+        if (stops_to_distance_.count(key) > 0) {
+            return stops_to_distance_.at(key);
+        }
 
+        key = make_pair(const_cast<Stop*>(to), const_cast<Stop*>(from));
+        if (stops_to_distance_.count(key) > 0) {
+            return stops_to_distance_.at(key);
+        }
 
+        return 0;
+    }
 
+    const std::unordered_map<std::string_view, Bus*> TransportCatalogue::GetBusesMap() const {
+        return buses_map_;
+    }
 
+    const std::unordered_map<std::string_view, Stop*> TransportCatalogue::GetStopsMap() const {
+        return stops_map_;
+    }
+
+} // namespace catalogue
