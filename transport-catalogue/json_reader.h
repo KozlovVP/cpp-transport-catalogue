@@ -1,18 +1,28 @@
 #pragma once
 
-// напишите решение с нуля
-// код сохраните в свой git-репозиторий
-
-#include <string>
+#include <cstdlib>
 #include <iostream>
-#include <set>
-#include <sstream>
+#include <string>
 
-void PrintBusInfo(std::ostream& out, const std::string& name, int total_size, int unique_size, double real_distance, double curv);
+#include "geo.h"
+#include "json.h"
+#include "map_renderer.h"
+#include "transport_catalogue.h"
 
-void PrintStopInfo(std::ostream& out, const std::string& name, const std::set<std::string>& buses);
+namespace catalogue {
+    class JsonReader {
+    public:
+        JsonReader(TransportCatalogue& catalogue, RenderSettings& render_settings, std::istream& input) :
+                catalogue_(catalogue), render_settings_(render_settings), doc_(json::Load(input)) {};
+        void Parse();
+        const json::Node& GetRequestNode() const;
+        const TransportCatalogue& GetCatalogue() const;
+        const RenderSettings& GetRenderSettings() const;
+        void Handle(std::ostream &out);
+    private:
+        TransportCatalogue& catalogue_;
+        RenderSettings& render_settings_;
+        json::Document doc_;
+    };
 
-void NotFoundBus(std::ostream& out, const std::string& name);
-
-void NotFoundStop(std::ostream& out, const std::string& name);
-
+} // namespace catalogue
