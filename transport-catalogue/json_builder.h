@@ -1,91 +1,88 @@
 #pragma once
 
-#include "json.h"
-#include <stack>
+#include <optional>
+#include <vector>
 #include <string>
-#include <memory>
+
+#include "json.h"
+
+namespace json {
+
+//using namespace std;
+//using namespace std::literals;
+
+class Builder {
+public:
+    Builder() {}
+
+    Builder& Key(std::string key);
+    Builder& Value(Node value);
+    Builder& StartArray();
+    Builder& StartDict();
+    Builder& EndArray();
+    Builder& EndDict();
+    Node Build();
+private:
+    Builder& AddNode(Node value, bool stack_element);
+
+    Node root_ = nullptr;
+    std::vector<Node*> nodes_stack_;
+    std::optional<std::string> key_;
+};
+
+class DictItemContext;
+class DictValueContext;
+class ArrayContext;
+class ValueContext;
+
+class BuilderContext {
+public:
+    BuilderContext(Builder& builder) : builder_(builder) {}
+    DictValueContext Key(std::string key);
+    ValueContext Value(Node value);
+    ArrayContext StartArray();
+    DictItemContext StartDict();
+    BuilderContext EndArray();
+    BuilderContext EndDict();
+    Node Build();
+protected:
+    Builder& builder_;
+};
+
+class DictItemContext : public BuilderContext {
+public:
+    DictItemContext(Builder& builder) : BuilderContext(builder) {}
+    ValueContext Value(Node node) = delete;
+    BuilderContext StartArray() = delete;
+    DictItemContext StartDict() = delete;
+    BuilderContext EndArray() = delete;
+    Node Build() = delete;
+};
+
+class DictValueContext : public BuilderContext {
+public:
+    DictValueContext(Builder& builder) : BuilderContext(builder) {}
+    DictValueContext Key(std::string key) = delete;
+    BuilderContext EndArray() = delete;
+    BuilderContext EndDict() = delete;
+    Node Build() = delete;
+    DictItemContext Value(Node value);
+};
+
+class ValueContext : public BuilderContext {
+public:
+    ValueContext(Builder& builder) : BuilderContext(builder) {}
+    DictValueContext& Key(std::string key) = delete;
+};
 
 
-using transport_catalogue::detail::json::Value;
-namespace transport_catalogue::detail::json::builder {
+class ArrayContext : public BuilderContext {
+public:
+    ArrayContext(Builder& builder) : BuilderContext(builder) {}
+    DictValueContext Key(std::string key) = delete;
+    BuilderContext EndDict() = delete;
+    Node Build() = delete;
+    ArrayContext Value(Node value);
+};
 
-                class KeyContext;
-                class DictionaryContext;
-                class ArrayContext;
-
-                class Builder {
-                public:
-                    Node MakeNode(const Value& value_);
-                    void AddNode(const Node& node);
-
-                    KeyContext Key(const std::string& key_);
-                    Builder& Value(const Value& value);
-
-                    DictionaryContext StartDict();
-                    Builder& EndDict();
-
-                    ArrayContext StartArray();
-                    Builder& EndArray();
-
-                    Node Build();
-
-                private:
-                    Node root_;
-                    std::vector<std::unique_ptr<Node>> nodes_stack_;
-
-                };
-
-                class BaseContext {
-                public:
-                    BaseContext(Builder& builder);
-
-                    KeyContext Key(const std::string& key);
-                    Builder& Value(const Value& value);
-
-                    DictionaryContext StartDict();
-                    Builder& EndDict();
-
-                    ArrayContext StartArray();
-                    Builder& EndArray();
-
-                protected:
-                    Builder& builder_;
-
-                };
-
-                class KeyContext : public BaseContext {
-                public:
-                    KeyContext(Builder& builder);
-
-                    KeyContext Key(const std::string& key) = delete;
-
-                    BaseContext EndDict() = delete;
-                    BaseContext EndArray() = delete;
-
-                    DictionaryContext Value(const ::Value& value);
-                };
-
-                class DictionaryContext : public BaseContext {
-                public:
-                    DictionaryContext(Builder& builder);
-
-                    DictionaryContext StartDict() = delete;
-
-                    ArrayContext StartArray() = delete;
-                    Builder& EndArray() = delete;
-
-                    Builder& Value(const ::Value& value) = delete;
-                };
-
-                class ArrayContext : public BaseContext {
-                public:
-                    ArrayContext(Builder& builder);
-
-                    KeyContext Key(const std::string& key) = delete;
-
-                    Builder& EndDict() = delete;
-
-                    ArrayContext Value(const ::Value& value);
-                };
-
-            }//end namespace transport_catalogue
+} // namespace json
