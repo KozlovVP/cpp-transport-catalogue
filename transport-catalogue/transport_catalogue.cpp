@@ -86,18 +86,6 @@ namespace catalogue {
         return unique_stops.size();
     }
 
-//    int TransportCatalogue::ComputeRoadLength(std::string_view bus_name, const Stop* from, const Stop* to) const {
-//        if (buses_map_.count(bus_name) == 0) {
-//            return 0;
-//        }
-//
-//        int length = 0;
-//        const from_it = find(buses_map_.at(bus_name)->stops.begin(), buses_map_.at(bus_name)->stops.end(), from);
-//        const to_it = find(buses_map_.at(bus_name)->stops.begin(), buses_map_.at(bus_name)->stops.end(), to);
-//
-//
-//    }
-
     RoadInfo TransportCatalogue::ComputeRoadInfo(string_view bus_name) const {
         if (buses_map_.count(bus_name) == 0) {
             return {0.0, 0};
