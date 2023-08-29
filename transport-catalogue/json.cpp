@@ -127,7 +127,7 @@ Node LoadNull(std::istream& input) {
 Node LoadNumber(std::istream& input) {
     std::string parsed_num;
 
-    // ��������� � parsed_num ��������� ������ �� input
+    
     auto read_char = [&parsed_num, &input] {
         parsed_num += static_cast<char>(input.get());
         if (!input) {
@@ -135,7 +135,7 @@ Node LoadNumber(std::istream& input) {
         }
     };
 
-    // ��������� ���� ��� ����� ���� � parsed_num �� input
+    
     auto read_digits = [&input, read_char] {
         if (!std::isdigit(input.peek())) {
             throw ParsingError("A digit is expected"s);
@@ -148,23 +148,23 @@ Node LoadNumber(std::istream& input) {
     if (input.peek() == '-') {
         read_char();
     }
-    // ������ ����� ����� �����
+    
     if (input.peek() == '0') {
         read_char();
-        // ����� 0 � JSON �� ����� ���� ������ �����
+      
     } else {
         read_digits();
     }
 
     bool is_int = true;
-    // ������ ������� ����� �����
+   
     if (input.peek() == '.') {
         read_char();
         read_digits();
         is_int = false;
     }
 
-    // ������ ���������������� ����� �����
+    
     if (int ch = input.peek(); ch == 'e' || ch == 'E') {
         read_char();
         if (ch = input.peek(); ch == '+' || ch == '-') {
@@ -176,13 +176,9 @@ Node LoadNumber(std::istream& input) {
 
     try {
         if (is_int) {
-            // ������� ������� ������������� ������ � int
             try {
                 return std::stoi(parsed_num);
-            } catch (...) {
-                // � ������ �������, ��������, ��� ������������
-                // ��� ���� ��������� ������������� ������ � double
-            }
+            } catch (...) {}
         }
         return std::stod(parsed_num);
     } catch (...) {
@@ -203,12 +199,6 @@ Node LoadNode(std::istream& input) {
         case '"':
             return LoadString(input);
         case 't':
-            // ������� [[fallthrough]] (�����������) ������ �� ������, � ��������
-            // ���������� ����������� � ��������, ��� ����� ����������� ���� ���������
-            // ��������� ������� � ���������� ��������� ����� case, � �� �������� �����
-            // �������� break, return ��� throw.
-            // � ������ ������, �������� t ��� f, ��������� � ������� ��������
-            // ��������� true ���� false
             [[fallthrough]];
         case 'f':
             input.putback(c);
@@ -256,7 +246,6 @@ void PrintString(const std::string& value, std::ostream& out) {
                 out << "\\n"sv;
                 break;
             case '"':
-                // ������� " � \ ��������� ��� \" ��� \\, ��������������
                 [[fallthrough]];
             case '\\':
                 out.put('\\');
@@ -279,9 +268,6 @@ void PrintValue<std::nullptr_t>(const std::nullptr_t&, const PrintContext& ctx) 
     ctx.out << "null"sv;
 }
 
-// � ������������ ������� PrintValue ��� ���� bool �������� value ���������
-// �� ����������� ������, ��� � � �������� �������.
-// � �������� ������������ ����� ������������ ����������:
 // void PrintValue(bool value, const PrintContext& ctx);
 template <>
 void PrintValue<bool>(const bool& value, const PrintContext& ctx) {
