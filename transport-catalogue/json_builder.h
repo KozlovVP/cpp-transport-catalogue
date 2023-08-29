@@ -8,8 +8,6 @@
 
 namespace json {
 
-//using namespace std;
-//using namespace std::literals;
 
 class Builder {
 public:
