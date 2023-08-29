@@ -22,7 +22,6 @@ namespace catalogue {
         const std::unordered_map<std::string_view, Bus*> GetBusesMap() const;
         const std::unordered_map<std::string_view, Stop*> GetStopsMap() const;
         int GetRouteLength(const Stop* from, const Stop* to) const;
-        //int ComputeRoadLength(std::string_view bus_name, const Stop* from, const Stop* to) const;
     private:
         class DistanceHasher {
         public:
