@@ -1,72 +1,121 @@
 #pragma once
 
-#include <iterator>
+
+#include "router.h"
 #include <memory>
-#include <optional>
+#include "transport_catalogue.h"
+#include <set>
 #include <string_view>
 #include <unordered_map>
-#include <utility>
-#include <variant>
-#include <vector>
-
-#include "geo.h"
 #include "graph.h"
-#include "router.h"
-#include "transport_catalogue.h"
+#include <optional>
+#include <variant>
 
-namespace catalogue {
-    using namespace graph;
-    using namespace catalogue;
+namespace ctlg{
 
-    struct RoutingSettings {
-        double bus_velocity;
-        int bus_wait_time;
-    };
 
-    struct BusRouteInfo {
-        std::string_view bus_name;
-        int span_count;
-        double time;
-    };
+using Graph = graph::DirectedWeightedGraph<float>;
+using Router = graph::Router<float>;
+using VertexOpt = std::optional<graph::VertexId>;
 
-    struct WaitRouteInfo {
-        std::string_view stop_name;
-        int time;
-    };
 
-    class TransportRouter {
+
+
+struct RouteWait{
+    std::string_view name;
+    float time;
+};
+
+struct RouteBus{
+    std::string_view name;
+    int span_count;
+    float time;
+};
+
+
+class TransportRouter{
     public:
-        TransportRouter(const TransportCatalogue& catalogue, RoutingSettings& routing_settings);
-        std::optional<std::pair<double, std::vector<std::variant<WaitRouteInfo, BusRouteInfo>>>>
-                FindRoute(std::string_view from, std::string_view to);
+
+    using Edge = graph::Edge<float>;
+
+    explicit TransportRouter(const TransportCatalogue& catalogue):graph_(catalogue.GetStopCount() * 2), velocity(catalogue.GetVelocity() / 60.0), wait(catalogue.GetWaitTime()) {
+
+        CreateGraph(catalogue);
+    };
+
+
+    void InitRouter();
+
+    std::optional<std::vector<std::variant<RouteBus, RouteWait>>> FindRoute(std::string_view stop1, std::string_view stop2) const;
 
     private:
-        const RoutingSettings& routing_settings_;
-        const TransportCatalogue& catalogue_;
-        std::unique_ptr<DirectedWeightedGraph<double>> graph_;
-        std::unique_ptr<Router<double>> router_;
-        std::unordered_map<std::string_view, VertexId> stops_vertex_;
-        std::unordered_map<EdgeId, std::variant<WaitRouteInfo, BusRouteInfo>> edge_info_;
 
-        void InitGraphVertex(const TransportCatalogue& catalogue);
-        void SetWaitEdge();
+    
+    void CreateGraph(const TransportCatalogue& catalogue);
 
-        template <typename It>
-        void SetStopsEdge(const std::string_view bus_name, It begin, It end) {
-            for (auto it_ext = begin; it_ext != end - 1; ++it_ext) {
-                double route_length = 0;
-                for (auto it_int = it_ext+1; it_int != end; ++it_int) {
-                    route_length += catalogue_.GetRouteLength(*(it_int-1), *it_int);
-                    double weight = route_length / (routing_settings_.bus_velocity * 1000 / 60);
-                    VertexId from = stops_vertex_[(*it_ext)->name] + 1; // пассажир садится в подъехавший автобус в вершине "остановка-автобус"
-                    VertexId to = stops_vertex_[(*it_int)->name]; // пассажир, выходя из автобуса должен попасть в вершину "остановка-ожидание"
-                    Edge<double> edge {from, to, weight};
-                    EdgeId edge_id = graph_->AddEdge(edge);
-                    int span_count = std::distance(it_ext, it_int);
-                    edge_info_[edge_id] = BusRouteInfo{bus_name, span_count, weight};
-                }
+    size_t GetStopWait(std::string_view name);
+    size_t GetStopRide(std::string_view name);
+
+    static float CalculateTime(float velocity, float length);
+
+
+    void FillGraph(const Edge& edge){
+        graph_.AddEdge(edge);
+    }
+
+
+    void CreateRideWaitStops(const BusRoute& route);
+
+    template<typename T>
+    void BuildEdge(T begin, T end, std::string_view name, const TransportCatalogue &catalogue);
+
+    Graph graph_;
+
+    std::shared_ptr<Router> router_;
+
+    std::unordered_map<std::string_view, std::pair<VertexOpt, VertexOpt>> stopname_vertexid_; 
+    std::unordered_map<graph::VertexId, std::string_view> vertexidwait_stopname_;
+    std::unordered_map<graph::VertexId, std::string_view> vertexidride_stopname_;
+
+    float velocity ;
+    int wait;
+
+
+    size_t current_index = 0;
+
+};
+
+template <typename T>
+void TransportRouter::BuildEdge(T begin, T end, std::string_view name, const TransportCatalogue &catalogue)
+{
+    for(auto it = begin; it != end; it++){
+        int span = 1;
+
+        std::string_view it_name = (*it)->name;
+        for(auto jt = it + 1; jt != end; jt++){
+            std::string_view jt_name = (*jt)->name;
+
+            Edge edge;
+
+            edge.span = span;
+            span++;
+
+            edge.from = GetStopRide(it_name);
+            edge.to = GetStopWait(jt_name);
+
+            float length = 0;
+            auto it_s = it;
+            for(auto it_e = it + 1; it_e <= jt;  it_e++){
+                length += catalogue.GetOneWayDistance((*(it_s))->name, (*it_e)->name);
+                it_s++;
             }
-        }
-    };
+            edge.weight = CalculateTime(velocity, length);
+        
+            edge.bus = name;
 
-} // namespace catalogue
+            FillGraph(edge);
+        }
+    }
+}
+
+}
