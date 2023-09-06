@@ -1,86 +1,144 @@
 #pragma once
 
-#include <optional>
-#include <vector>
-#include <string>
-
 #include "json.h"
+#include <optional>
+#include <deque>
 
-namespace json {
+namespace json{
 
-
-class Builder {
-public:
-    Builder() {}
-
-    Builder& Key(std::string key);
-    Builder& Value(Node value);
-    Builder& StartArray();
-    Builder& StartDict();
-    Builder& EndArray();
-    Builder& EndDict();
-    Node Build();
-private:
-    Builder& AddNode(Node value, bool stack_element);
-
-    Node root_ = nullptr;
-    std::vector<Node*> nodes_stack_;
-    std::optional<std::string> key_;
-};
-
+class BaseItemContext;
 class DictItemContext;
-class DictValueContext;
-class ArrayContext;
-class ValueContext;
+class ArrayItemContext;
+class KeyItemContext;
+class ValueItemContext;
+class ValueKeyItemContext;
 
-class BuilderContext {
+class Builder{
 public:
-    BuilderContext(Builder& builder) : builder_(builder) {}
-    DictValueContext Key(std::string key);
-    ValueContext Value(Node value);
-    ArrayContext StartArray();
+
+    Builder(){
+        nodes_stack_.push_back(&root);
+    }
+
+    Builder(const Builder& builder){
+        flag = builder.flag;
+        root = builder.root;
+        nodes_stack_ = builder.nodes_stack_;
+        Key_ = builder.Key_;
+    }
+
+    Builder& operator=(Builder builder){
+        flag = builder.flag;
+        root = std::move(builder.root);
+        nodes_stack_ = std::move(builder.nodes_stack_);
+        Key_ = std::move(builder.Key_);
+
+        return *this;
+    }
+
+    KeyItemContext Key(std::string_view name);
+
+    BaseItemContext Value(Node::Value value);
+
+    DictItemContext StartDict() ;
+
+    ArrayItemContext StartArray();
+
+    BaseItemContext EndDict() ;
+
+    BaseItemContext EndArray();
+
+    json::Node Build(); 
+
+
+private:
+    bool flag = false;
+
+    bool CheckDict(){
+        return std::holds_alternative<Dict>(nodes_stack_.back()->GetValue());
+    }  
+
+    bool CheckArray(){
+        return std::holds_alternative<Array>(nodes_stack_.back()->GetValue());
+    }
+
+    bool CheckNull(){
+        return std::holds_alternative<std::nullptr_t>(nodes_stack_.back()->GetValue());
+    }
+
+    Node root;
+    std::vector<Node*> nodes_stack_;
+    std::optional<std::string> Key_;
+
+};
+
+
+
+
+
+
+class BaseItemContext{
+public:
+    BaseItemContext(Builder& temp): build(temp){}
+
+    BaseItemContext EndDict();
+
+    KeyItemContext Key(std::string_view name);
+
+    ArrayItemContext StartArray();
+
     DictItemContext StartDict();
-    BuilderContext EndArray();
-    BuilderContext EndDict();
+
+    BaseItemContext EndArray();
+
+    BaseItemContext Value(Node::Value value);
+    
     Node Build();
-protected:
-    Builder& builder_;
+
+    Builder& build;
 };
 
-class DictItemContext : public BuilderContext {
+class DictItemContext final: protected BaseItemContext{
 public:
-    DictItemContext(Builder& builder) : BuilderContext(builder) {}
-    ValueContext Value(Node node) = delete;
-    BuilderContext StartArray() = delete;
-    DictItemContext StartDict() = delete;
-    BuilderContext EndArray() = delete;
-    Node Build() = delete;
+    DictItemContext(Builder& temp):BaseItemContext(temp){}
+
+
+    using BaseItemContext::Key;
+    using BaseItemContext::EndDict;
 };
 
-class DictValueContext : public BuilderContext {
+
+
+class ArrayItemContext final: protected BaseItemContext{
 public:
-    DictValueContext(Builder& builder) : BuilderContext(builder) {}
-    DictValueContext Key(std::string key) = delete;
-    BuilderContext EndArray() = delete;
-    BuilderContext EndDict() = delete;
-    Node Build() = delete;
-    DictItemContext Value(Node value);
+
+    ArrayItemContext(Builder& temp): BaseItemContext(temp){}
+
+    using BaseItemContext::StartArray;
+    using BaseItemContext::StartDict;
+    using BaseItemContext::EndArray;
+    
+
+    ArrayItemContext Value(Node::Value value){
+        build.Value(value);
+
+        return ArrayItemContext(build);
+    }
 };
 
-class ValueContext : public BuilderContext {
+
+class KeyItemContext final: protected BaseItemContext{
 public:
-    ValueContext(Builder& builder) : BuilderContext(builder) {}
-    DictValueContext& Key(std::string key) = delete;
+    KeyItemContext(Builder& temp): BaseItemContext(temp){}   
+
+    using BaseItemContext::StartArray;
+    using BaseItemContext::StartDict;
+
+    DictItemContext Value(Node::Value value){
+        build.Value(value);
+        return DictItemContext(build);
+    }
+    
 };
 
-
-class ArrayContext : public BuilderContext {
-public:
-    ArrayContext(Builder& builder) : BuilderContext(builder) {}
-    DictValueContext Key(std::string key) = delete;
-    BuilderContext EndDict() = delete;
-    Node Build() = delete;
-    ArrayContext Value(Node value);
-};
-
-} // namespace json
+}
