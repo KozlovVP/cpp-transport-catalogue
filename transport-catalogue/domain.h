@@ -1,66 +1,61 @@
 #pragma once
 
+#include<string_view>
 #include "geo.h"
-
-#include <set>
 #include <string>
 #include <vector>
 
-namespace catalogue {
-    struct Stop {
-        std::string name;
-        geo::Coordinates coordinates;
-        Stop(const std::string &name, const geo::Coordinates &coordinates) : name(name), coordinates(coordinates) {};
-    };
-    struct Bus {
-        std::string name;
-        std::vector<Stop*> stops;
-        bool is_roundtrip;
-        Bus(const std::string &name, const std::vector<Stop*> &stops, bool is_roundtrip) :
-                name(name), stops(stops), is_roundtrip(is_roundtrip) {};
+namespace ctlg{
+
+struct BusStop{
+    BusStop() = default;
+    BusStop(geo::Coordinates cord, std::string_view name);
+    BusStop(geo::Coordinates cord, std::string name);
+
+    geo::Coordinates coord;
+    std::string name;
+};
+
+struct BusRoute{
+    enum class Type{
+        STRAIGHT,
+        CYCLIC
     };
 
-    struct RoadInfo {
-        RoadInfo() = default;
+    std::vector<const BusStop*> buses; 
+    std::string name;
+    Type type;
+};
 
-        RoadInfo(double distance, int length)
-            : distance(distance)
-            , length(length) {
+namespace Hash{
+
+    struct BusStop{
+        size_t operator()(const ctlg::BusStop& stop) const{
+            size_t hash = 0;
+            hash += std::hash<double>{}(stop.coord.lat) * 37 ^ 3;
+            hash += std::hash<double>{}(stop.coord.lng) * 37 ^ 2;
+            hash += std::hash<std::string>{}(stop.name) * 37 ;
+            return hash;
         }
-
-        double distance = 0.0;
-        int length = 0;
     };
 
-    struct BusInfo {
-        BusInfo() = default;
-
-        BusInfo(const std::string &bus, int stops, int unique_stops, const RoadInfo &road_info)
-            : bus(bus)
-            , stops(stops)
-            , unique_stops(unique_stops)
-            , road_info(road_info) {
+    struct BusRoute{
+        size_t operator()(const ctlg::BusRoute& stop) const{
+            return std::hash<std::string>{}(stop.name) * 37 ^ 2;
         }
-
-        std::string bus;
-        int stops = 0;
-        int unique_stops = 0;
-        RoadInfo road_info = {0.0, 0};
     };
 
-    struct StopInfo {
-        StopInfo() = default;
-
-        StopInfo(const std::string &stop, const std::set<std::string_view>* &buses, bool stop_exist, bool buses_exist)
-            : stop(stop)
-            , buses(buses)
-            , stop_exist(stop_exist)
-            , buses_exist(buses_exist) {
+    //TODO
+    // проверить эффективность хеша на имени и попробовать сравнить с хешем на координатах
+    struct BusA_BusB{
+        size_t operator()(std::pair<const ctlg::BusStop*, const ctlg::BusStop*> pair) const{
+            size_t hash = 0;
+            hash += std::hash<std::string>{}(pair.first->name) * 37 ^ 2; 
+            hash += std::hash<std::string>{}(pair.second->name) * 37;
+            return hash;
         }
-
-        std::string stop;
-        const std::set<std::string_view>* buses = nullptr;
-        bool stop_exist = false;
-        bool buses_exist = false;
     };
+
+}
+
 }
