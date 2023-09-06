@@ -4,6 +4,8 @@
 
 #include <cstdlib>
 #include <vector>
+#include <tuple>
+#include <unordered_map>
 
 namespace graph {
 
@@ -15,6 +17,16 @@ struct Edge {
     VertexId from;
     VertexId to;
     Weight weight;
+
+    int span;
+
+    size_t index;
+
+    std::string_view bus;
+
+    bool operator==(const Edge<Weight>& edge) const {
+        return std::tuple{from, to, weight} == std::tuple{edge.from, edge.to, edge.weight};
+    }
 };
 
 template <typename Weight>
@@ -22,7 +34,7 @@ class DirectedWeightedGraph {
 private:
     using IncidenceList = std::vector<EdgeId>;
     using IncidentEdgesRange = ranges::Range<typename IncidenceList::const_iterator>;
-
+    
 public:
     DirectedWeightedGraph() = default;
     explicit DirectedWeightedGraph(size_t vertex_count);
@@ -46,7 +58,9 @@ DirectedWeightedGraph<Weight>::DirectedWeightedGraph(size_t vertex_count)
 template <typename Weight>
 EdgeId DirectedWeightedGraph<Weight>::AddEdge(const Edge<Weight>& edge) {
     edges_.push_back(edge);
+
     const EdgeId id = edges_.size() - 1;
+    
     incidence_lists_.at(edge.from).push_back(id);
     return id;
 }
