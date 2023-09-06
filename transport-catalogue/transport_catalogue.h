@@ -1,48 +1,94 @@
 #pragma once
-
-#include "domain.h"
-
-#include <deque>
-#include <set>
-#include <string>
-#include <vector>
 #include <unordered_map>
-#include <utility>
+#include <string>
+#include <unordered_set>
+#include "geo.h"
+#include <functional>
+#include <vector>
+#include <string_view>
+#include <deque>
+#include "domain.h" 
 
-namespace catalogue {
-    class TransportCatalogue {
-    public:
-        TransportCatalogue() {};
+namespace ctlg{
 
-        void AddStop(const std::string &name, const geo::Coordinates& coordinates);
-        void AddDistance(const std::string& from, const std::string& to, int distance);
-        void AddBus(const std::string& bus_name, const std::vector<std::string>& stops_name, bool is_roundtrip);
-        BusInfo GetBusInfo(std::string_view bus_name) const;
-        StopInfo GetStopInfo(std::string_view stop_name) const;
-        const std::unordered_map<std::string_view, Bus*> GetBusesMap() const;
-        const std::unordered_map<std::string_view, Stop*> GetStopsMap() const;
-        int GetRouteLength(const Stop* from, const Stop* to) const;
-    private:
-        class DistanceHasher {
-        public:
-            size_t operator()(std::pair<Stop*, Stop*> stops_pair) const {
-                size_t first = hasher(stops_pair.first);
-                size_t second = hasher(stops_pair.second);
-                return first + 37 * second;
-            }
-            std::hash<const void*> hasher;
-        };
 
-        int ComputeStopCount(std::string_view bus_name) const;
-        int ComputeUniqueStopCount(std::string_view bus_name) const;
-        RoadInfo ComputeRoadInfo(std::string_view bus_name) const;
-        //int GetRouteLength(const Stop* from, const Stop* to) const;
+class TransportCatalogue{
+public:
 
-        std::unordered_map<std::string_view, Bus*> buses_map_;
-        std::unordered_map<std::string_view, Stop*> stops_map_;
-        std::deque<Stop> stops_;
-        std::deque<Bus> buses_;
-        std::unordered_map<std::string_view, std::set<std::string_view>> stop_to_buses_;
-        std::unordered_map<std::pair<Stop*, Stop*>, int, DistanceHasher> stops_to_distance_;
-    };
-} // namespace catalogue
+    void AddBusStop(const BusStop& stop);
+
+    void AddBusRoute(const std::vector<std::string>& route, std::string num, BusRoute::Type type);
+
+    bool BusStopExist(std::string_view stop) const;
+
+    std::vector<BusStop> GetStops(std::string_view num) const ;
+
+    const BusStop* GetStop(std::string_view name) const ;
+
+    const BusRoute* GetRoute(std::string_view num) const ;
+
+    size_t GetUniqueStopsForRoute(std::string_view num) const ;
+
+    BusRoute::Type GetRouteType(std::string_view num) const ;
+
+    std::unordered_set<std::string_view>  GetRouteByStop(std::string_view name) const ;
+
+    void SetDistanceBetweenStops(std::string_view stop1, std::string_view stop2, int distance);
+
+    int GetDistanceBetweenStops(std::string_view stop1, std::string_view stop2) const ; 
+
+    int GetOneWayDistance(std::string_view stop1, std::string_view stop2) const {
+        return distance_between_stops.at({GetStop(stop1), GetStop(stop2)});
+    }
+
+
+    std::vector<std::string_view> GetRouteNames() const;
+
+    std::vector<const BusRoute*> GetRouteDataBase() const;
+
+    void SetBusVelocity(float velocity){
+        bus_velocity_ = velocity;
+    }
+
+    float GetVelocity() const {
+        return bus_velocity_;
+    }
+
+    void SetWaitTime(int time){
+        bus_wait_time_ = time;
+    }
+
+    int GetWaitTime() const {
+        return bus_wait_time_;
+    }
+
+    int GetStopCount() const{
+        return stop_count_;
+    }
+
+    int GetBusCount() const {
+        return busroute_database.size();
+    }
+
+private:
+
+    // Нужно для резервирования места для остановки в БД
+    const BusStop* CreateBusStop(std::string_view name); 
+
+    
+    std::deque<BusStop> busstop_database;
+    std::deque<BusRoute> busroute_database;
+    std::unordered_map<std::string_view, const BusStop*> name_busstop_database;
+    std::unordered_map<std::string_view, const BusRoute*> name_busroute_database;
+    std::unordered_map<std::string_view, std::unordered_set<std::string_view>> busstop_busroute_database; // остановка - ключ, маршрут - значение
+    std::unordered_map<std::pair<const BusStop*, const BusStop*>, int, ctlg::Hash::BusA_BusB> distance_between_stops;
+
+
+    float bus_velocity_;
+    int bus_wait_time_;
+    int stop_count_ = 0;
+    int bus_count_ = 0;
+
+};
+
+}
