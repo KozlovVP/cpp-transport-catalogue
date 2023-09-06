@@ -1,61 +1,140 @@
 #include "transport_router.h"
+#include <iostream>
+#include <cmath>
 
-namespace catalogue {
-    TransportRouter::TransportRouter(const TransportCatalogue& catalogue, RoutingSettings& routing_settings)
-            : routing_settings_(routing_settings), catalogue_(catalogue) {
-        InitGraphVertex(catalogue);
-        SetWaitEdge();
 
-        const auto buses_map = catalogue.GetBusesMap();
-        for (const auto& bus_map : buses_map) {
-            SetStopsEdge(bus_map.first, bus_map.second->stops.begin(), bus_map.second->stops.end());
-            if (!bus_map.second->is_roundtrip) {
-                SetStopsEdge(bus_map.first, bus_map.second->stops.rbegin(), bus_map.second->stops.rend());
+
+using namespace ctlg;
+using namespace graph;
+
+
+
+inline size_t ctlg::TransportRouter::GetStopWait(std::string_view name)
+{ 
+    return stopname_vertexid_.at(name).first.value();
+}
+
+inline size_t ctlg::TransportRouter::GetStopRide(std::string_view name)
+{
+    return stopname_vertexid_.at(name).second.value();
+}
+
+void ctlg::TransportRouter::CreateGraph(const TransportCatalogue &catalogue)
+{
+
+    for(auto name : catalogue.GetRouteNames()){
+        
+        const BusRoute* route = catalogue.GetRoute(name);
+
+        CreateRideWaitStops(*route);
+
+    
+        for(auto it = route->buses.begin(); it != route->buses.end(); it++){
+            Edge edge;
+
+            std::string_view name = (*it)->name;
+
+            edge.from = GetStopWait(name);
+            edge.to = GetStopRide(name);
+            edge.weight = wait;    
+
+            FillGraph(edge);
+        }
+
+
+        BuildEdge(route->buses.begin(), route->buses.end(), name, catalogue);
+
+        if(route->type == BusRoute::Type::STRAIGHT){
+            BuildEdge(route->buses.rbegin(), route->buses.rend(), name, catalogue);
+        }
+
+
+    }   
+}
+
+void ctlg::TransportRouter::InitRouter()
+{
+    router_ = std::make_shared<Router>(std::ref(graph_));
+}
+
+
+std::optional<std::vector<std::variant<RouteBus, RouteWait>>> ctlg::TransportRouter::FindRoute(std::string_view stop1, std::string_view stop2) const
+{
+
+    if(stopname_vertexid_.find(stop1) == stopname_vertexid_.end() || stopname_vertexid_.find(stop2) == stopname_vertexid_.end()){
+        return std::nullopt;
+    }
+    
+
+    std::optional<graph::Router<float>::RouteInfo> route = router_->BuildRoute(stopname_vertexid_.at(stop1).first.value(), stopname_vertexid_.at(stop2).first.value());    
+    
+    if(route.has_value()){
+
+        std::vector<std::variant<RouteBus, RouteWait>> res;
+
+        res.reserve(route.value().edges.size());
+
+        for(auto range : route->edges){
+            Edge edge = graph_.GetEdge(range);
+
+            VertexId from = edge.from;
+            VertexId to = edge.to;
+
+
+            auto find_name = [&](VertexId id){
+                if(vertexidwait_stopname_.find(id) != vertexidwait_stopname_.end()){
+                    return vertexidwait_stopname_.at(id);
+                }
+                return vertexidride_stopname_.at(id);
+            };
+
+            std::string_view from_name = find_name(from);
+            std::string_view to_name = find_name(to);
+
+            if(from_name == to_name){
+                RouteWait wait;
+                wait.name = from_name;
+                wait.time = edge.weight;
+                res.push_back(wait);
+            } else{
+                RouteBus bus;
+
+                bus.name = edge.bus;
+                bus.span_count = edge.span;
+                bus.time = edge.weight;
+                res.push_back(bus);
             }
         }
 
-        router_ = std::make_unique<Router<double>>(*graph_);
+    return res;
+
+
+    } else{
+        return std::nullopt;
     }
+}
 
-    std::optional<std::pair<double, std::vector<std::variant<WaitRouteInfo, BusRouteInfo>>>>
-            TransportRouter::FindRoute(std::string_view from, std::string_view to) {
-        VertexId from_id = stops_vertex_[from]; // пассажир, начинает путь из вершины "остановка-ожидание"
-        VertexId to_id = stops_vertex_[to]; // пассажир, заканчивает путь на вершине "остановка-ожидание"
-        auto info = router_->BuildRoute(from_id, to_id);
-        if (!info.has_value()) {
-            return std::nullopt;
-        }
 
-        std::vector<std::variant<WaitRouteInfo, BusRouteInfo>> route_items;
-        for (const auto& edge_id : info.value().edges) {
-            route_items.push_back(edge_info_[edge_id]);
-        }
 
-        std::pair<double, std::vector<std::variant<WaitRouteInfo, BusRouteInfo>>> p = {info.value().weight, route_items};
-        std::optional<std::pair<double, std::vector<std::variant<WaitRouteInfo, BusRouteInfo>>>> o_p = p;
-        return o_p;
-        //return {info.value().weight, route_items};
-    }
+inline float ctlg::TransportRouter::CalculateTime(float velocity, float length)
+{
+    return (length / 1000) / velocity;   
+}
 
-    void TransportRouter::InitGraphVertex(const TransportCatalogue& catalogue) {
-        const auto stops_map = catalogue.GetStopsMap();
-        // Четные вершины - вершины "остановка-ожидание", нечетные - "остановка-автобус"
-        VertexId id = 0;
-        for (const auto& stop_map : stops_map) {
-            stops_vertex_[stop_map.first] = id;
-            id += 2; // "остановка-автобус"
-        }
+void ctlg::TransportRouter::CreateRideWaitStops(const BusRoute &route)
+{
+    for(auto it = route.buses.begin(); it != route.buses.end(); it++){
+            
+        std::string_view name = (*it)->name;
 
-        graph_ = std::make_unique<DirectedWeightedGraph<double>>(2*stops_map.size());
-    }
+        if(stopname_vertexid_.find(name) == stopname_vertexid_.end()){
 
-    void TransportRouter::SetWaitEdge() {
-        for (const auto stop_vertex : stops_vertex_) {
-            VertexId from = stop_vertex.second;
-            VertexId to = stop_vertex.second + 1;
-            Edge<double> edge { from, to, static_cast<double>(routing_settings_.bus_wait_time) };
-            EdgeId edge_id = graph_->AddEdge(edge);
-            edge_info_[edge_id] = WaitRouteInfo{stop_vertex.first, routing_settings_.bus_wait_time};
+            size_t index_f = current_index++;
+            size_t index_s = current_index++;
+            
+            stopname_vertexid_[name] = {index_f, index_s};
+            vertexidride_stopname_[index_s] = name;
+            vertexidwait_stopname_[index_f] = name;
         }
     }
 }
